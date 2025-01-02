@@ -83,6 +83,11 @@ National Technology and Engineering Solutions of Sandia, LLC., a wholly owned
 subsidiary of Honeywell International, Inc., for the U.S. Department of
 Energy’s National Nuclear Security Administration under Contract DENA0003525.
 
+
+## CoMTE Version 2 - Software Flow
+
+For an overview of the software flow, see [CoMTESoftwareFlowchart.drawio.pdf](CoMTESoftwareFlowchart.drawio.pdf).
+
 ## License
 
 This project is licensed under the BSD 3-Clause License - see the LICENSE file for details
