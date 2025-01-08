@@ -1,0 +1,42 @@
+# reference
+# https://setuptools.pypa.io/en/latest/userguide/pyproject_config.html
+# PEP621
+# https://peps.python.org/pep-0621/
+# also
+# https://peps.python.org/pep-0518/
+#
+# Python Packages
+# https://py-pkgs.org/welcome
+# 
+# https://pip.pypa.io/en/stable/reference/build-system/pyproject-toml/
+# https://setuptools.pypa.io/en/latest/userguide/package_discovery.html
+# https://packaging.python.org/en/latest/specifications/declaring-project-metadata/ 
+# TODO: mlrose removal or update so that we can avoid the sklearn dependency
+#       or hope package https://github.com/gkhayes/mlrose gets updated
+
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "comlex"
+version = "0.1.0"
+authors = [{name = "Emre Ates (1), Burak Aksar (1), Vitus J. Leung (2), Ayse K. Coskun (1)"}]
+maintainers = [
+  {name="Vitus Leung", email="vjleung@sandia.gov"},
+  {name="Jasper Duan", email="jzduan@sandia.gov"}
+]
+description = "Python implementation of counterfactual explainations."
+readme = "README.md"
+requires-python = ">=3.6"
+ classifiers = [
+     "Programming Language :: Python :: 3",
+     "Operating System :: Linux",
+ ]
+dependencies = [
+  "matplotlib",
+  "pandas",
+  "numpy",
+  "scikit-learn",
+  "mlrose-ky",
+]
