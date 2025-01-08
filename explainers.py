@@ -15,21 +15,15 @@ Energy’s National Nuclear Security Administration under Contract DENA0003525.
 """
 
 import logging
-import random
 import numbers
 import multiprocessing
 import uuid
 
-from skopt import gp_minimize, gbrt_minimize
 import matplotlib.pyplot as plt
 import pandas as pd
 import numpy as np
 from sklearn.neighbors import KDTree
-#Workaround for mlrose package
-import six
-import sys
-sys.modules['sklearn.externals.six'] = six
-import mlrose
+import mlrose_ky as mlrose
 
 
 class BaseExplanation:
@@ -41,10 +35,16 @@ class BaseExplanation:
         self.labels = labels
         self.silent = silent
         self.num_distractors = num_distractors
-        self.metrics = self.clf.steps[0][1].column_names
+        if hasattr(clf, "metrics") and clf.metrics is not None:
+            self.metrics = clf.metrics
+        else:
+            self.metrics = self.clf.steps[0][1].column_names
         self.dont_stop = dont_stop
-        self.window_size = len(timeseries.loc[
-            timeseries.index.get_level_values('node_id')[0]])
+        if hasattr(clf, "window_size") and clf.window_size is not None:
+            self.window_size = clf.window_size
+        else:
+            self.window_size = len(timeseries.loc[
+                timeseries.index.get_level_values('node_id')[0]])
         self.ts_min = np.repeat(timeseries.min().values, self.window_size)
         self.ts_max = np.repeat(timeseries.max().values, self.window_size)
         self.ts_std = np.repeat(timeseries.std().values, self.window_size)
@@ -84,24 +84,67 @@ class BaseExplanation:
                 result = result[idx, :]
             return result
 
-    def _plot_changed(self, metric, original, distractor, savefig=False):
+    def _plot_explanation(self, original, distractor, explanations, savefig=False, timeseries=True, filename=None):
         fig = plt.figure(figsize=(6,3))
         ax = fig.gca()
+        original_val = original.values[0] if hasattr(original, "values") else original
+        distractor_val = distractor.values[0] if hasattr(distractor, "values") else [distractor[0]]
+        if timeseries:
+            plt.plot(range(distractor.shape[1]),
+                    original_val, label='Original',
+                    figure=fig,
+                    )
+            plt.plot(range(distractor.shape[1]),
+                    distractor_val, label='Distractor',
+                    figure=fig)
+            ax.set_xlabel('Time (s)')
+        else:
+            plt.plot(range(distractor.shape[1]),
+                    original_val, label='Original',
+                    figure=fig, color='blue',
+                    marker='o',
+                    )
+            plt.plot(range(distractor.shape[1]),
+                    distractor_val, label='Distractor',
+                    figure=fig, color='red',
+                    marker='x')
+            ax.set_xlabel('X')
+        ax.set_ylabel('Y')
+        for explanation in explanations:
+            plt.axvline(x = explanation, color = 'r', label = str(explanation))
+        ax.legend()
+        if savefig:
+            if not filename:
+                filename = "{}.pdf".format(uuid.uuid4())
+            fig.savefig(filename, bbox_inches='tight')
+            logging.info("Saved the figure to %s", filename)
+            plt.close(fig)
+        else:
+            fig.show()
+        
+    def _plot_changed(self, metric, original, distractor, savefig=False, filename=None):
+        fig = plt.figure(figsize=(6,3))
+        ax = fig.gca()
+        orig_metric = original[metric].values if hasattr(original[metric], "values") else [original[metric]]
+        distractor_metric = distractor[metric].values if hasattr(distractor[metric], "values") else [distractor[metric]]
         plt.plot(range(distractor.shape[0]),
-                 original[metric].values, label='x$_{test}$',
+                 orig_metric, label='x$_{test}$',
                  figure=fig,
                  )
         plt.plot(range(distractor.shape[0]),
-                 distractor[metric].values, label='Distractor',
+                 distractor_metric, label='Distractor',
                  figure=fig)
         ax.set_ylabel(metric)
         ax.set_xlabel('Time (s)')
         ax.legend()
         if savefig:
-            filename = "{}.pdf".format(uuid.uuid4())
+            if not filename:
+                filename = "{}.pdf".format(uuid.uuid4())
             fig.savefig(filename, bbox_inches='tight')
             logging.info("Saved the figure to %s", filename)
-        fig.show()
+            plt.close(fig)
+        else:
+            fig.show()
 
     def construct_per_class_trees(self):
         """Used to choose distractors"""
@@ -113,12 +156,20 @@ class BaseExplanation:
         true_positive_node_ids = {c: [] for c in self.clf.classes_}
         for pred, (idx, row) in zip(preds, self.labels.iterrows()):
             if row['label'] == pred:
+                if isinstance(idx, int): # wrap single datapoints in array
+                    idx = [idx]
                 true_positive_node_ids[pred].append(idx[0])
         for c in self.clf.classes_:
             dataset = []
             for node_id in true_positive_node_ids[c]:
-                dataset.append(self.timeseries.loc[
-                    [node_id], :, :].values.T.flatten())
+                # The below syntax of timeseries.loc[[node_id], :, :] is extremely fragile. The first two ranges index into the multi-index
+                # while the third range indexes the columns. But anything other than ":" for the third range causes the code to crash, apparently
+                # due to ambiguity. See the Warning here: https://pandas.pydata.org/pandas-docs/stable/user_guide/advanced.html#using-slicers
+                try:
+                    sliced_node = self.timeseries.loc[[node_id], :, :]
+                except pd.errors.IndexingError: # try slicing with fallback
+                    sliced_node = self.timeseries.loc[[node_id], :]
+                dataset.append(sliced_node.values.T.flatten())
                 self.per_class_node_indices[c].append(node_id)
             self.per_class_trees[c] = KDTree(np.stack(dataset))
         if not self.silent:
@@ -144,153 +195,23 @@ class BaseExplanation:
         if isinstance(to_maximize, numbers.Integral):
             to_maximize = self.clf.classes_[to_maximize]
         distractors = []
+        if not isinstance(x_test, pd.DataFrame): # instantiate array-like as DataFrame
+            x_test = pd.DataFrame(x_test)
         for idx in self.per_class_trees[to_maximize].query(
                 x_test.values.T.flatten().reshape(1, -1),
                 k=n_distractors)[1].flatten():
-            distractors.append(self.timeseries.loc[
-                [self.per_class_node_indices[to_maximize][idx]], :, :])
+            try:
+                sliced_distractor = self.timeseries.loc[[self.per_class_node_indices[to_maximize][idx]], :, :]
+            except pd.errors.IndexingError: # try slicing with fallback
+                sliced_distractor = self.timeseries.loc[[self.per_class_node_indices[to_maximize][idx]], :]
+                sliced_distractor['node_id'] = [idx]
+                sliced_distractor.set_index('node_id', inplace=True) # aka sample_id
+            distractors.append(sliced_distractor)
         if not self.silent:
             logging.info("Returning distractors %s", [
                 x.index.get_level_values('node_id').unique().values[0]
                 for x in distractors])
         return distractors
-
-    def local_lipschitz_estimate(
-            self, x, optim='gp', eps=None, bound_type='box', clip=True,
-            n_calls=100, njobs=-1, verbose=False, exp_kwargs=None,
-            n_neighbors=None):
-        """Compute one-sided lipschitz estimate for explainer.
-        Adequate for local Lipschitz, for global must have
-        the two sided version. This computes:
-
-            max_z || f(x) - f(z)|| / || x - z||
-
-        Instead of:
-
-            max_z1,z2 || f(z1) - f(z2)|| / || z1 - z2||
-
-        If n_neighbors is provided, does a local search on n closest neighbors
-
-        If eps provided, does local lipzshitz in:
-            - box of width 2*eps along each dimension if bound_type = 'box'
-            - box of width 2*eps*va, along each dimension if bound_type =
-                'box_norm' (i.e. normalize so that deviation is
-                eps % in each dim )
-            - box of width 2*eps*std along each dimension if bound_type =
-                'box_std'
-
-        max_z || f(x) - f(z)|| / || x - z||   , with f = theta
-
-        clip: clip bounds to within (min, max) of dataset
-
-        """
-        np_x = x.values.T.flatten()
-        if n_neighbors is not None and self.tree is None:
-            self.construct_tree()
-
-        # Compute bounds for optimization
-        if eps is None:
-            # If want to find global lipzhitz ratio maximizer
-            # search over "all space" - use max min bounds of dataset
-            # fold of interest
-            lwr = self.ts_min.flatten()
-            upr = self.ts_max.flatten()
-        elif bound_type == 'box':
-            lwr = (np_x - eps).flatten()
-            upr = (np_x + eps).flatten()
-        elif bound_type == 'box_std':
-            lwr = (np_x - eps * self.ts_std).flatten()
-            upr = (np_x + eps * self.ts_std).flatten()
-        if clip:
-            lwr = lwr.clip(min=self.ts_min.min())
-            upr = upr.clip(max=self.ts_max.max())
-        if exp_kwargs is None:
-            exp_kwargs = {}
-
-        consts = []
-        bounds = []
-        variable_indices = []
-        for idx, (l, u) in enumerate(zip(*[lwr, upr])):
-            if u == l:
-                consts.append(l)
-            else:
-                consts.append(None)
-                bounds.append((l, u))
-                variable_indices.append(idx)
-        consts = np.array(consts)
-        variable_indices = np.array(variable_indices)
-
-        orig_explanation = set(self.explain(x, **exp_kwargs))
-        if verbose:
-            logging.info("Original explanation: %s", orig_explanation)
-
-        def lipschitz_ratio(y):
-            nonlocal self
-            nonlocal consts
-            nonlocal variable_indices
-            nonlocal orig_explanation
-            nonlocal np_x
-            nonlocal exp_kwargs
-
-            if len(y) == len(consts):
-                # For random search
-                consts = y
-            else:
-                # Only search in variables that vary
-                np.put_along_axis(consts, variable_indices, y, axis=0)
-            df_y = pd.DataFrame(np.array(consts).reshape((len(self.metrics),
-                                                          self.window_size)).T,
-                                columns=self.metrics)
-            df_y = pd.concat([df_y], keys=['y'], names=['node_id'])
-            new_explanation = set(self.explain(df_y, **exp_kwargs))
-            # Hamming distance
-            exp_distance = len(orig_explanation.difference(new_explanation)) \
-                + len(new_explanation.difference(orig_explanation))
-            # Multiply by 1B to get a sensible number
-            ratio = exp_distance * -1e9 / np.linalg.norm(np_x - consts)
-            if verbose:
-                logging.info("Ratio: %f", ratio)
-            return ratio
-
-        # Run optimization
-        min_ratio = 0
-        worst_case = np_x
-        if n_neighbors is not None:
-            for idx in self.tree.query(np_x.reshape(1, -1),
-                                       k=n_neighbors)[1].flatten():
-                y = self.timeseries.loc[
-                    [self.node_indices[idx]], :, :].values.T.flatten()
-                ratio = lipschitz_ratio(y)
-                if ratio < min_ratio:
-                    min_ratio = ratio
-                    worst_case = y
-            if verbose:
-                logging.info("The worst case explanation was for %s", idx)
-        elif optim == 'gp':
-            logging.info('Running BlackBox Minimization with Bayesian Opt')
-            # Need minus because gp only has minimize method
-            res = gp_minimize(lipschitz_ratio, bounds, n_calls=n_calls,
-                              verbose=verbose, n_jobs=njobs)
-            min_ratio, worst_case = res['fun'], np.array(res['x'])
-        elif optim == 'gbrt':
-            logging.info('Running BlackBox Minimization with GBT')
-            res = gbrt_minimize(lipschitz_ratio, bounds, n_calls=n_calls,
-                                verbose=verbose, n_jobs=njobs)
-            min_ratio, worst_case = res['fun'], np.array(res['x'])
-        elif optim == 'random':
-            for i in range(n_calls):
-                y = (upr - lwr) * np.random.random(len(np_x)) + lwr
-                ratio = lipschitz_ratio(y)
-                if ratio < min_ratio:
-                    min_ratio = ratio
-                    worst_case = y
-
-        if len(worst_case) != len(consts):
-            np.put_along_axis(consts, variable_indices, worst_case, axis=0)
-        if verbose:
-            logging.info("Best ratio: %f, norm: %f", min_ratio,
-                         np.linalg.norm(np_x - consts))
-        return min_ratio, consts
 
 
 CLASSIFIER = None
@@ -320,7 +241,9 @@ class BruteForceSearch(BaseExplanation):
         best_column = None
         tuples = []
         for c in distractor.columns:
-            if np.any(distractor[c].values != x_test[c].values):
+            dist_c = distractor[c].values if hasattr(distractor[c], "values") else [distractor[c]]
+            test_c = x_test[c].values if hasattr(x_test[c], "values") else [x_test[c]]
+            if np.any(dist_c != test_c):
                 tuples.append((c, label_idx))
         if self.threads == 1:
             results = []
@@ -340,7 +263,8 @@ class BruteForceSearch(BaseExplanation):
                          best_column, best_case)
         return best_column, best_case
 
-    def explain(self, x_test, to_maximize=None, num_features=10,return_dist=False, savefig=False):
+    def explain(self, x_test, to_maximize=None, num_features=3, return_dist=False,
+                savefig=False, single=False, train_iter=1000, timeseries=True, filename=None):
         orig_preds = self.clf.predict_proba(x_test)
         orig_label = np.argmax(orig_preds)
         if to_maximize is None:
@@ -383,15 +307,17 @@ class BruteForceSearch(BaseExplanation):
                 best_column, _ = self._find_best(modified, dist, to_maximize)
                 if best_column is None:
                     break
-                if not self.silent:
-                    self._plot_changed(best_column, modified, dist, savefig=savefig)
+                if not self.silent and not single:
+                    self._plot_changed(best_column, modified, dist, savefig=savefig, filename=filename)
                 modified[best_column] = dist[best_column].values
                 explanation.append(best_column)
+            if not self.silent and single and len(best_explanation) != 0:
+                self._plot_explanation(x_test, best_dist, best_explanation, savefig=savefig, timeseries=timeseries, filename=filename)
 
         if not return_dist:
-            return explanation
+            return best_explanation
         else:
-            return explanation, best_dist
+            return best_explanation, best_dist
 
 
 class LossDiscreteState:
@@ -419,7 +345,10 @@ class LossDiscreteState:
         # If the value is one, replace from distractor
         for col_replace, a in zip(self.cols_swap, feature_matrix):
             if a == 1:
-                new_case[col_replace] = self.distractor[col_replace].values
+                if hasattr(new_case[col_replace], '__iter__'):
+                    new_case[col_replace] = self.distractor[col_replace].values
+                else: # new_case is a single value instead of array-like
+                    new_case[col_replace] = self.distractor[col_replace].values[0]
 
         replaced_feature_count = np.sum(feature_matrix)
 
@@ -461,7 +390,7 @@ class OptimizedSearch(BaseExplanation):
         problem = mlrose.DiscreteOpt(
             length=len(columns), fitness_fn=fitness_fn,
             maximize=False, max_val=2)
-        best_state, best_fitness = mlrose.random_hill_climb(
+        best_state, best_fitness, _ = mlrose.random_hill_climb(
             problem,
             max_attempts=max_attempts,
             max_iters=maxiter,
@@ -497,11 +426,12 @@ class OptimizedSearch(BaseExplanation):
                 short_explanation.add(best_col)
         return short_explanation
 
-    def explain(self, x_test, num_features=None, to_maximize=None, return_dist = False, savefig=False):
+    def explain(self, x_test, num_features=None, to_maximize=None, return_dist = False,
+                savefig=False, single=False, train_iter=1000, timeseries=True, filename=None, custom=False):
         # num_feature is maximum number of features
         orig_preds = self.clf.predict_proba(x_test)
         orig_label = np.argmax(orig_preds)
-
+        
         #binary classification
         if to_maximize is None:
             to_maximize = np.argmin(orig_preds)
@@ -512,18 +442,26 @@ class OptimizedSearch(BaseExplanation):
             logging.info("Working on turning label from %s to %s",
                          self.clf.classes_[orig_label],
                          self.clf.classes_[to_maximize])
-
         explanation = self._get_explanation(
-            x_test, to_maximize, num_features, return_dist, savefig=savefig)
+            x_test, to_maximize, num_features, return_dist, savefig=savefig,
+            single=single, train_iter=train_iter, timeseries=timeseries, filename=filename)
         if not explanation:
-            logging.info("Used greedy search for %s",
-                         x_test.index.get_level_values('node_id')[0])
+            if isinstance(x_test, pd.DataFrame) and not custom:
+                logging.info("Used greedy search for %s",
+                            x_test.index.get_level_values('node_id')[0])
+            else:
+                logging.info("Used greedy search for %s",
+                            x_test)
             explanation = self.backup.explain(x_test, num_features=num_features,
-                                              to_maximize=to_maximize, return_dist=return_dist, savefig=savefig)
+                                              to_maximize=to_maximize, return_dist=return_dist,
+                                              savefig=savefig, single=single, train_iter=train_iter,
+                                              filename=filename)
 
         return explanation
 
-    def _get_explanation(self, x_test, to_maximize, num_features, return_dist=False, savefig=False):
+    def _get_explanation(self, x_test, to_maximize, num_features, return_dist=False,
+                         savefig=False, single=False, train_iter=1000, timeseries=True,
+                         filename=None):
         distractors = self._get_distractors(
             x_test, to_maximize, n_distractors=self.num_distractors)
 
@@ -539,18 +477,22 @@ class OptimizedSearch(BaseExplanation):
             if not self.silent:
                 logging.info("Trying distractor %d / %d",
                              count + 1, self.num_distractors)
-
-            columns = [
-                c for c in dist.columns
-                if np.any(dist[c].values != x_test[c].values)
-            ]
+            columns = []
+            for c in dist.columns:
+                dist_c = dist[c].values if hasattr(dist[c], "values") else [dist[c]]
+                test_c = x_test[c].values if hasattr(x_test[c], "values") else [x_test[c]]
+                if np.any(dist_c != test_c):
+                    columns.append(c)
 
             # Init options
             init = [0] * len(columns)
 
+            columns = np.array(columns)
+            init = np.array(init)
+
             result = self.opt_Discrete(
                 to_maximize, x_test, dist, columns, init=init,
-                max_attempts=1000, maxiter=1000, num_features=num_features)
+                max_attempts=train_iter, maxiter=train_iter, num_features=num_features)
 
             if not self.discrete_state:
                 explanation = {
@@ -576,7 +518,6 @@ class OptimizedSearch(BaseExplanation):
 
             if not self.silent:
                 logging.info("Current probas: %s", probas)
-
             if np.argmax(probas) == to_maximize:
                 current_best = np.max(probas)
                 if current_best > best_explanation_score:
@@ -586,9 +527,12 @@ class OptimizedSearch(BaseExplanation):
                     best_dist = dist
 
         if not self.silent and len(best_explanation) != 0:
-            for metric in best_explanation:
-                self._plot_changed(metric, x_test, best_dist, savefig=savefig)
-
+            if single:
+                self._plot_explanation(x_test, best_dist, best_explanation, savefig=savefig, timeseries=timeseries, filename=filename)
+            else:
+                for metric in best_explanation:
+                    self._plot_changed(metric, x_test, best_dist, savefig=savefig, filename=filename)
+            
         if return_dist == False or len(best_explanation) == 0:
             return best_explanation
         else:
