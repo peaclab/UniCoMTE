@@ -5,7 +5,7 @@ UniCoMTE is a **model-agnostic explainability framework** designed to generate *
 A counterfactual explanation answers the question:  
 > *“What minimal change in this time series would have led the model to predict a different class?”*
 
-Unlike the original [CoMTE](https://www.bu.edu/peaclab/files/2021/05/CoMTE___ICAPAI.pdf) framework, which was implemented for specific model backends, **UniCoMTE** introduces a **unified and extensible pipeline** that supports multiple machine learning ecosystems, including **scikit-learn**, **PyTorch**, and **TensorFlow**—all without requiring model-specific modifications.
+Unlike the original [CoMTE](https://github.com/peaclab/CoMTE) framework, which was implemented for specific model backends, **UniCoMTE** introduces a **unified and extensible pipeline** that supports multiple machine learning ecosystems, including **scikit-learn**, **PyTorch**, and **TensorFlow**—all without requiring model-specific modifications.
 
 ---
 
