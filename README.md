@@ -1,4 +1,4 @@
-# UniCoMTE
+# UniCoMTE (CoMTEv1.1)
 **Universal Counterfactual Explanations for Multivariate Time Series Classifiers**
 
 UniCoMTE is a **model-agnostic explainability framework** designed to generate **counterfactual explanations** for predictions made by multivariate time series (MTS) classifiers.  
