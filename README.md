@@ -10,9 +10,9 @@ Unlike the original [CoMTE](https://github.com/peaclab/CoMTE) framework, which w
 ---
 
 ## 🚀 Key Features
-- 🧩 **Model-Agnostic:** Works seamlessly with diverse ML frameworks via a standardized wrapper interface.  
-- ⚙️ **Model Wrrapper:** Automatically handles model queries, preprocessing, and inference for black-box classifiers.
-- ⚙️ **Data Wrrapper:** Automatically handles various data formats to ensure allignment.
+- 🧩 **Model-Agnostic:** Works with diverse ML frameworks via a user-defined wrapper interface.  
+- ⚙️ **Model Wrrapper:** Allows user to define commands for model queries, and pre and post-processing steps for black-box classifiers.
+- ⚙️ **Data Wrrapper:** Allows user to define operations to handle various input data formats.
 - 🔍 **Efficient Distractor Retrieval:** Uses **class-specific KD-trees** for fast nearest-neighbor searches among correctly classified samples.  
 - 📉 **Sparse, Actionable Explanations:** Identifies the **smallest set of variable–time pairs** that must change to alter classification.  
 - 🧠 **Physiologically Relevant:** Validated on healthcare applications like **ECG diagnosis**, where temporal and variable dependencies are critical.  
@@ -24,12 +24,12 @@ Unlike the original [CoMTE](https://github.com/peaclab/CoMTE) framework, which w
 UniCoMTE consists of three modular components:
 
 ### 1. Data & Model Wrapper  
-- Standardizes data and model interfaces across ML backends.  
-- Automatically handles:  
-  - Preprocessing (e.g., normalization, batching, reshaping)  
+- Allows user to standardize data and model interfaces across ML backends.  
+- User can define:  
+  - Pre-processing (e.g., normalization, batching, reshaping)
+  - Post-processing (e.g., thresholding or calibration)
   - Mode switching (eager/evaluation)  
   - Logit-to-class mapping and probability queries  
-- Supports custom post-processing (e.g., thresholding or calibration).
 
 ### 2. Distractor Selection Module  
 - Retrieves *distractors*—samples from the target class that closely resemble the instance being explained.  
