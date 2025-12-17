@@ -11,8 +11,8 @@ Unlike the original [CoMTE](https://github.com/peaclab/CoMTE) framework, which w
 
 ## 🚀 Key Features
 - 🧩 **Model-Agnostic:** Works with diverse ML frameworks via a user-defined wrapper interface.  
-- ⚙️ **Model Wrrapper:** Allows user to define commands for model queries, and pre and post-processing steps for black-box classifiers.
-- ⚙️ **Data Wrrapper:** Allows user to define operations to handle various input data formats.
+- ⚙️ **Model Wrapper:** Allows user to define commands for model queries, and pre and post-processing steps for black-box classifiers.
+- ⚙️ **Data Wrapper:** Allows user to define operations to handle various input data formats.
 - 🔍 **Efficient Distractor Retrieval:** Uses **class-specific KD-trees** for fast nearest-neighbor searches among correctly classified samples.  
 - 📉 **Sparse, Actionable Explanations:** Identifies the **smallest set of variable–time pairs** that must change to alter classification.  
 - 🧠 **Physiologically Relevant:** Validated on healthcare applications like **ECG diagnosis**, where temporal and variable dependencies are critical.  
