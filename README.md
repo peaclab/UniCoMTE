@@ -30,7 +30,7 @@ UniCoMTE consists of three modular components:
   - Inference command
   - Post-processing (e.g., thresholding, calibration, Logit-to-class mapping)
   - Mode switching (e.g., eager, evaluation)
-- For the data wrapper, the user can define operations for
+- For the data wrapper, the user can define operations for:
   - Sample transformations: converting custom training and testing samples into canonical representations (e.g., multi-index NumPy arrays)
   - Label transformations: converting custom labels into standardized NumPy arrays suitable for training and evaluation
 
