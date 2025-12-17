@@ -25,11 +25,14 @@ UniCoMTE consists of three modular components:
 
 ### 1. Data & Model Wrapper  
 - Allows user to standardize data and model interfaces across ML backends.  
-- User can define:  
+- For model wrapper, user can define operations for:  
   - Pre-processing (e.g., normalization, batching, reshaping)
-  - Post-processing (e.g., thresholding or calibration)
-  - Mode switching (eager/evaluation)  
-  - Logit-to-class mapping and probability queries  
+  - Inference command
+  - Post-processing (e.g., thresholding, calibration, Logit-to-class mapping)
+  - Mode switching (e.g., eager, evaluation)
+- For the data wrapper, the user can define operations for
+  - Sample transformations: converting custom training and testing samples into canonical representations (e.g., multi-index NumPy arrays)
+  - Label transformations: converting custom labels into standardized NumPy arrays suitable for training and evaluation
 
 ### 2. Distractor Selection Module  
 - Retrieves *distractors*—samples from the target class that closely resemble the instance being explained.  
