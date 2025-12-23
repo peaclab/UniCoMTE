@@ -63,7 +63,7 @@ pip install -r requirements.txt
 
 If you use **UniCoMTE** in your research, please cite our paper:
 
-**Justin Li, Efe Sencan, Jasper Zheng Duan, Vitus J. Leung, Stephen Tsaur, Ayşe K. Coşkun.**  
+**Justin Li, Efe Sencan, Jasper Zheng Duan, Vitus J. Leung, Stephen Tsaur, Ayşe K. Coskun.**  
 *UniCoMTE: A Universal Counterfactual Framework for Explaining Time-Series Classifiers on ECG Data.*  
 arXiv preprint, Dec. 2025.
 
