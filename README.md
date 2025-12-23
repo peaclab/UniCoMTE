@@ -45,7 +45,6 @@ UniCoMTE consists of three modular components:
 
 The resulting counterfactuals reveal **which waveform segments or variables are critical** to the model’s prediction and **how they must change** to yield a different outcome.
 
----
 
 ## ⚙️ Installation
 
@@ -56,3 +55,26 @@ The resulting counterfactuals reveal **which waveform segments or variables are 
 Install dependencies:
 ```bash
 pip install -r requirements.txt
+```
+
+---
+
+## 📄 Citation
+
+If you use **UniCoMTE** in your research, please cite our paper:
+
+**Justin Li, Efe Sencan, Jasper Zheng Duan, Vitus J. Leung, Stephen Tsaur, Ayşe K. Coşkun.**  
+*UniCoMTE: A Universal Counterfactual Framework for Explaining Time-Series Classifiers on ECG Data.*  
+arXiv preprint, Dec. 2025.
+
+🔗 https://arxiv.org/abs/2512.17100
+
+### BibTeX
+```bibtex
+@article{li2025unicomte,
+  title   = {UniCoMTE: A Universal Counterfactual Framework for Explaining Time-Series Classifiers on ECG Data},
+  author  = {Li, Justin and Sencan, Efe and Duan, Jasper Zheng and Leung, Vitus J. and Tsaur, Stephen and Coskun, Ayse K.},
+  journal = {arXiv preprint arXiv:2512.17100},
+  year    = {2025}
+}
+
