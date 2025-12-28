@@ -46,7 +46,7 @@ UniCoMTE consists of three modular components:
 The resulting counterfactuals reveal **which waveform segments or variables are critical** to the model’s prediction and **how they must change** to yield a different outcome.
 
 
-## ⚙️ Installation
+## ⚙️ Installation and Usage
 
 ### Requirements
 - Python 3.8+
@@ -56,6 +56,10 @@ Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
+
+Noteboks demonstrating usage: 
+
+
 
 ---
 
