@@ -1,7 +1,17 @@
 #!/usr/bin/env python3
-"""
-    modified code that allows for KDTree input
-    this allows us to bypass waiting for training and creation of KDTrees
+"""Contains the code for ICAPAI'21 paper "Counterfactual Explanations for Multivariate Time Series"
+
+Authors:
+    Emre Ates (1), Burak Aksar (1), Vitus J. Leung (2), Ayse K. Coskun (1)
+Affiliations:
+    (1) Department of Electrical and Computer Engineering, Boston University
+    (2) Sandia National Laboratories
+
+This work has been partially funded by Sandia National Laboratories. Sandia
+National Laboratories is a multimission laboratory managed and operated by
+National Technology and Engineering Solutions of Sandia, LLC., a wholly owned
+subsidiary of Honeywell International, Inc., for the U.S. Department of
+Energy’s National Nuclear Security Administration under Contract DENA0003525.
 """
 
 import logging
@@ -14,12 +24,13 @@ import pandas as pd
 import numpy as np
 from sklearn.neighbors import KDTree
 import mlrose_ky as mlrose
-import time
+
+# key change in line 398
 
 
 class BaseExplanation:
-    def __init__(self, clf, timeseries, labels, kd_tree, silent=True,
-                 num_distractors=2, dont_stop=False, 
+    def __init__(self, clf, timeseries, labels, silent=True,
+                 num_distractors=2, dont_stop=False,
                  threads=multiprocessing.cpu_count()):
         self.clf = clf
         self.timeseries = timeseries
@@ -40,7 +51,7 @@ class BaseExplanation:
         self.ts_max = np.repeat(timeseries.max().values, self.window_size)
         self.ts_std = np.repeat(timeseries.std().values, self.window_size)
         self.tree = None
-        self.per_class_trees = kd_tree   ## user must provide an input for KDTree
+        self.per_class_trees = None
         self.threads = threads
 
     def explain(self, x_test, **kwargs):
@@ -139,42 +150,19 @@ class BaseExplanation:
 
     def construct_per_class_trees(self):
         """Used to choose distractors"""
-        # check if KDTree has been created
         if self.per_class_trees is not None:
-            for c, tree in self.per_class_trees.items():
-                num_indices = len(tree.data)  # The number of points in the KDTree
-                print(f"Class {c} has {num_indices} indices.")
             return
-        
-        # initialize
         self.per_class_trees = {}
         self.per_class_node_indices = {c: [] for c in self.clf.classes_}
-        print('making predictions for per class trees')
+        print('making predictions')
         preds = self.clf.predict(self.timeseries)
-
-        from collections import Counter
-        #checking preds ...
-        counter = Counter(preds)
-        # Print unique items and their frequencies
-
-        # check which 
         true_positive_node_ids = {c: [] for c in self.clf.classes_}
-        
         for pred, (idx, row) in zip(preds, self.labels.iterrows()):
-            if isinstance(row['label'], tuple):  # skip tuples for now - not sure how to handle them in MLRose Optimization
-                continue
             if row['label'] == pred:
                 if isinstance(idx, int): # wrap single datapoints in array
                     idx = [idx]
                 true_positive_node_ids[pred].append(idx[0])
-        
-        # validation
-        print("\nTraining Data True Positive Dictionary Stats")
-        for key, value in true_positive_node_ids.items():
-            print(f"Key: {key}, Length of list: {len(value)}")
-        
         print('making per class trees')
-        start_time = time.time()
         for c in self.clf.classes_:
             dataset = []
             for node_id in true_positive_node_ids[c]:
@@ -185,26 +173,12 @@ class BaseExplanation:
                     sliced_node = self.timeseries.loc[[node_id], :, :]
                 except pd.errors.IndexingError: # try slicing with fallback
                     sliced_node = self.timeseries.loc[[node_id], :]
-
-                
                 dataset.append(sliced_node.values.T.flatten())
                 self.per_class_node_indices[c].append(node_id)
             if dataset:
                 self.per_class_trees[c] = KDTree(np.stack(dataset))
-
-        end_time = time.time()
-        #print(f"elapsed time = {end_time - start_time}")
-
         if not self.silent:
             logging.info("Finished constructing per class kdtree")
-        
-        #print('KD Tree Structure printout:')
-        # for label, tree in self.per_class_trees.items():
-        #     #print(f"\nKD Tree for class: {label}")
-        #     #print(f"Tree data shape: {tree.data.shape}")  # Data shape
-        # for c, tree in self.per_class_trees.items():
-        #         num_indices = len(tree.data)  # The number of points in the KDTree
-        #         #print(f"Class {c} has {num_indices} indices.")      
 
     def construct_tree(self):
         if self.tree is not None:
@@ -221,47 +195,39 @@ class BaseExplanation:
             logging.info("Finished constructing the kdtree")
 
     def _get_distractors(self, x_test, to_maximize, n_distractors=2):
-        import sys
         self.construct_per_class_trees()
         # to_maximize can be int, string or np.int64
         if isinstance(to_maximize, numbers.Integral):
             to_maximize = self.clf.classes_[to_maximize]
-        
         distractors = []
-        distractors_idx = []
-
         if not isinstance(x_test, pd.DataFrame): # instantiate array-like as DataFrame
             x_test = pd.DataFrame(x_test)
 
         if to_maximize not in self.per_class_trees.keys():
-            print('There are no distractors to explain the class of interest. Please select another class of interest')
+            print('there are no distractors to explain the class of interest. Please select another class of interest')
             sys.exit()
-
-        queried_indices = self.per_class_trees[to_maximize].query(
+            
+        for idx in self.per_class_trees[to_maximize].query(
                 x_test.values.T.flatten().reshape(1, -1),
-                k=n_distractors)[1].flatten()
-        
-        # create distractors
-        for idx in queried_indices:
-            flat = np.array(self.per_class_trees[to_maximize].data[idx])
-            sliced_distractor = flat.reshape(12, 4096).T
-            # set distractor columns
-            column_names = ['DI', 'DII', 'DIII', 'AVR', 'AVL', 'AVF', 'V1', 'V2', 'V3', 'V4', 'V5', 'V6']
-            # Create the DataFrame with the given column names
-            sliced_distractor = pd.DataFrame(sliced_distractor, columns=column_names)
+                k=n_distractors)[1].flatten():
+            try:
+                sliced_distractor = self.timeseries.loc[[self.per_class_node_indices[to_maximize][idx]], :, :]
+            except pd.errors.IndexingError: # try slicing with fallback
+                sliced_distractor = self.timeseries.loc[[self.per_class_node_indices[to_maximize][idx]], :]
+                sliced_distractor['node_id'] = [idx]
+                sliced_distractor.set_index('node_id', inplace=True) # aka sample_id
             distractors.append(sliced_distractor)
-            distractors_idx.append(idx)
-
         if not self.silent:
             logging.info("Returning distractors %s", [
                 x.index.get_level_values('node_id').unique().values[0]
                 for x in distractors])
-                    
         return distractors
+
 
 CLASSIFIER = None
 X_TEST = None
 DISTRACTOR = None
+
 
 def _eval_one(tup):
     column, label_idx = tup
@@ -271,6 +237,7 @@ def _eval_one(tup):
     x_test = X_TEST.copy()
     x_test[column] = DISTRACTOR[column].values
     pred = CLASSIFIER.predict_proba(x_test)[0][label_idx]
+    print(pred)
     return pred
 
 
@@ -296,6 +263,7 @@ class BruteForceSearch(BaseExplanation):
         #if self.threads == 1:
         results = []
         for t in tuples:
+            print(t)
             results.append(_eval_one(t))
         #else:
         #    print('pooling')
@@ -303,7 +271,10 @@ class BruteForceSearch(BaseExplanation):
         #    results = pool.map(_eval_one, tuples)
         #    pool.close()
         #    pool.join()
-
+        print('checking for beats')
+        print(f"distractor is {self.clf.predict_proba(distractor)}")
+        print(f'prediction on x_test is {self.clf.predict_proba(x_test)}')
+        print(f'best case is {best_case}')
         for (c, _), pred in zip(tuples, results):
             if pred > best_case:
                 best_column = c
@@ -314,16 +285,9 @@ class BruteForceSearch(BaseExplanation):
         return best_column, best_case
 
     def explain(self, x_test, to_maximize=None, num_features=3, return_dist=False,
-                savefig=False, single=False, train_iter=100, timeseries=True, filename=None):
-        
-        
+                savefig=False, single=False, train_iter=10, timeseries=True, filename=None):
         orig_preds_probas = self.clf.predict_proba(x_test)
         orig_label = self.clf.predict(x_test)
-        
-        # prints to check functionality
-        print(f"original sample probabilities: {orig_preds_probas}")
-        print(f"original sample classification: {orig_label}")
-        print(f"class of interest: {to_maximize}")  
 
         if to_maximize is None:
             to_maximize = np.argmin(orig_preds_probas)
@@ -332,79 +296,56 @@ class BruteForceSearch(BaseExplanation):
         if not self.silent:
             logging.info("Working on turning label from %s to %s",
                          orig_label, to_maximize)
-        
         distractors = self._get_distractors(
             x_test, to_maximize, n_distractors=self.num_distractors)
-        
-        # init vars
         best_explanation = set()
         best_explanation_score = 0
-
         for count, dist in enumerate(distractors):
+            print(f"trying distractor {count + 1} of {self.num_distractors}")
             if not self.silent:
                 logging.info("Trying distractor %d / %d",
                              count + 1, self.num_distractors)
-            dist_idx = 900
-            
-            # initializations
             explanation = []
             modified = x_test.copy()
             prev_best = 0
-            # best_dist = dist
-            print(f"trying distractor {count + 1} of {self.num_distractors}")
-
-
-            # need code to find the best dist  
+            best_dist = dist #TODO: Only supports one distractor
             while True:
-                probas = self.clf.predict_proba(modified)[0]
-                label = self.clf.predict(modified)[0]
-                #print(f'probability is {probas}')
-                ##print(f'label is {label}')
-
+                probas = self.clf.predict_proba(modified)
+                label = self.clf.predict(modified)
+                print(f"current probas is {probas}")
+                
                 if not self.silent:
                     logging.info("Current probas: %s", probas)
 
+                print(f"label is {label}")
+                print(f"to max is {to_maximize}")
                 if label == to_maximize:
-                    #print("label equates to to_max!")
-                    current_best = probas[label]
+                    print('setting CB')
+                    current_best = np.max(probas)
                     if current_best > best_explanation_score:
                         best_explanation = explanation
-                        best_dist = dist # update best distractor if this distractor's score is better
                         best_explanation_score = current_best
-                        dist_idx = count
-                        #print(f"best explanation is now {explanation}")
-                        #print(f"best explanation score is now {best_explanation_score}")
-                        #print(f"dist_idx is {dist_idx}")
-                        
-                    if current_best <= prev_best:    
+                    if current_best <= prev_best:
                         break
                     prev_best = current_best
-                    if not self.dont_stop:   
+                    if not self.dont_stop:
                         break
-
-                # not sure what this does
-                # if self.dont_stop is False and there is a best explanation already
-                # will the loop already break from the code above?
                 if (not self.dont_stop and
                         len(best_explanation) != 0 and
                         len(explanation) >= len(best_explanation)):
                     break
-
-                ##print("finding best_col")
+                print('finding best col')
                 best_column, _ = self._find_best(modified, dist, to_maximize)
-                #print(f'best col is {best_column}')
-
+                print(f'best column is {best_column}')
                 if best_column is None:
                     break
-                
                 if not self.silent and not single:
                     self._plot_changed(best_column, modified, dist, savefig=savefig, filename=filename)
                 
-                # update modified
                 modified[best_column] = dist[best_column].values
                 
                 explanation.append(best_column)
-                #print(f"explanation is now{explanation}")
+                print(f"new explanation is {explanation}")
             
             if not self.silent and single and len(best_explanation) != 0:
                 self._plot_explanation(x_test, best_dist, best_explanation, savefig=savefig, timeseries=timeseries, filename=filename)
@@ -433,23 +374,17 @@ class LossDiscreteState:
         return self.evaluate(feature_matrix)
 
     def evaluate(self, feature_matrix):
-        #print('evaluating')
-        #print(feature_matrix)
 
         new_case = self.x_test.copy()
         assert len(self.cols_swap) == len(feature_matrix)
-        #print(self.clf.predict_proba(new_case))
 
         # If the value is one, replace from distractor
         for col_replace, a in zip(self.cols_swap, feature_matrix):
             if a == 1:
-                #print('replacing')
                 if hasattr(new_case[col_replace], '__iter__'):
                     new_case[col_replace] = self.distractor[col_replace].values
                 else: # new_case is a single value instead of array-like
                     new_case[col_replace] = self.distractor[col_replace].values[0]
-
-
 
         replaced_feature_count = np.sum(feature_matrix)
 
@@ -458,18 +393,11 @@ class LossDiscreteState:
         #     loss_pred = 1
         # else:
         # Will return the prob of the other class
-        #print(self.clf.predict_proba(new_case))
         result = self.clf.predict_proba(new_case)[0][self.target]
-        #print(f'modified probability is {result}')
         feature_loss = self.reg * np.maximum(0, replaced_feature_count - self.max_features)
-        #print(f'feature loss is {feature_loss}')
         loss_pred = np.square(np.maximum(0, 0.95 - result))
-        #print(np.maximum(0, 0.95 - result))
-        #print(f"loss_pred is {loss_pred}")
-        loss_pred = loss_pred + feature_loss
 
-        
-        #print(-loss_pred)
+        loss_pred = loss_pred + feature_loss
 
         return -loss_pred if self.maximize else loss_pred
 
@@ -481,50 +409,31 @@ class LossDiscreteState:
 
 class OptimizedSearch(BaseExplanation):
 
-    def __init__(self, clf, timeseries, labels, kd_tree, **kwargs):
-        super().__init__(clf, timeseries, labels, kd_tree, **kwargs)
+    def __init__(self, clf, timeseries, labels, **kwargs):
+        super().__init__(clf, timeseries, labels, **kwargs)
         self.discrete_state = False
-        self.backup = BruteForceSearch(clf, timeseries, labels, kd_tree, **kwargs)
-    
+        self.backup = BruteForceSearch(clf, timeseries, labels, **kwargs)
+
     def opt_Discrete(self, to_maximize, x_test, dist, columns, init,
                      max_attempts, maxiter, num_features=None):
 
-        print("\n\n-------Running Discrete Optimization Algorithm for Feature Selection------")
-
-        # define fitness func
         fitness_fn = LossDiscreteState(
             to_maximize,
-            self.clf, 
-            x_test, 
-            dist,
-            columns, 
-            reg=0.8, 
-            max_features=num_features,
-            maximize=False)
-        
-        #print('define fitness function')
-        #print(to_maximize)
-        #print(columns)
-        #print(num_features)
-        
+            self.clf, x_test, dist,
+            columns, reg=0.8, max_features=num_features,
+            maximize=False
+        )
         problem = mlrose.DiscreteOpt(
             length=len(columns), fitness_fn=fitness_fn,
-            maximize=False, max_val=2)
-        
-        #print('define problem')
-        #print(len(columns))
-        
-        best_state, best_fitness, _ = mlrose.random_hill_climb(  
+            maximize=False, max_val=2
+        )
+        best_state, best_fitness, _ = mlrose.random_hill_climb(  # change
             problem,
             max_attempts=max_attempts,
             max_iters=maxiter,
             init_state=init,
-            restarts = 0,
-            random_state = 42)
-        
-        #print("random hill climbing")
-        #print(max_attempts)
-        #print(maxiter)
+            restarts = 5,
+        )
 
         self.discrete_state = True
         return best_state
@@ -555,71 +464,58 @@ class OptimizedSearch(BaseExplanation):
         return short_explanation
 
     def explain(self, x_test, num_features=None, to_maximize=None, return_dist = False,
-                savefig=False, single=False, train_iter=100, timeseries=True, filename=None, custom=False):
-        
-        # print preliminary stats
+                savefig=False, single=False, train_iter=10, timeseries=True, filename=None, custom=False):
+        # num_feature is maximum number of features
         orig_label = self.clf.predict(x_test)
         orig_preds_probas = self.clf.predict_proba(x_test)
-        print('-------Original Sample Statistics-------')
-        print(f'Original Sample Class: {orig_label} \nSample Probabilities: {orig_preds_probas}\nClass of Interest: {to_maximize}\n\n')
         
-        # perform checks
+        #binary classification
         if to_maximize is None:
             to_maximize = np.argmin(orig_preds_probas)
-        if isinstance(orig_label, tuple) and to_maximize in orig_label:
-            print('Sample is already classified as the class of interest')
-            return []
-        elif orig_label == to_maximize:
-            print('Sample is already classified as the class of interest')
+
+        if orig_label == to_maximize:
             return []
         if not self.silent:
             logging.info("Working on turning label from %s to %s",
                          self.clf.classes_[orig_label],
                          self.clf.classes_[to_maximize])
-        
-        # get explanation with optimized search
-        print('-------Starting Optimized Search-------')
         explanation = self._get_explanation(
             x_test, to_maximize, num_features, return_dist, savefig=savefig,
             single=single, train_iter=train_iter, timeseries=timeseries, filename=filename)
-        
-
-        # get explanation with greedy search
-        print('-------Starting Greedy Search-------')
         if not explanation:
+            print('using greedy search')
+            #if isinstance(x_test, pd.DataFrame) and not custom:
+            #    logging.info("Used greedy search for %s",
+            #                x_test.index.get_level_values('node_id')[0])
+            #else:
+            #    logging.info("Used greedy search for %s",
+            #                x_test)
             explanation = self.backup.explain(x_test, num_features=num_features,
                                               to_maximize=to_maximize, return_dist=return_dist,
                                               savefig=savefig, single=single, train_iter=train_iter,
                                               filename=filename)
-            
-        print('Explanation Generated')
+
         return explanation
 
     def _get_explanation(self, x_test, to_maximize, num_features, return_dist=False,
-                         savefig=False, single=False, train_iter=100, timeseries=True,
+                         savefig=False, single=False, train_iter=10, timeseries=True,
                          filename=None):
-        
-        # get distractors
         distractors = self._get_distractors(
             x_test, to_maximize, n_distractors=self.num_distractors)
-        
+
         # Avoid constructing KDtrees twice
         self.backup.per_class_trees = self.per_class_trees
+        self.backup.per_class_node_indices = self.per_class_node_indices
 
-        # define best explanation stats
         best_explanation = set()
         best_explanation_score = 0
 
-        # iterate through each distractor
         for count, dist in enumerate(distractors):
-            print(f"\nprocessing distractor {count + 1} of {self.num_distractors}")
-            dist_idx = 900
 
             if not self.silent:
                 logging.info("Trying distractor %d / %d",
                              count + 1, self.num_distractors)
             columns = []
-            print(x_test.columns)
             for c in dist.columns:
                 dist_c = dist[c].values if hasattr(dist[c], "values") else [dist[c]]
                 test_c = x_test[c].values if hasattr(x_test[c], "values") else [x_test[c]]
@@ -632,13 +528,9 @@ class OptimizedSearch(BaseExplanation):
             columns = np.array(columns)
             init = np.array(init)
 
-            dist_probas = self.clf.predict_proba(dist)
-            print(f'Probabilities of distractor sample: {dist_probas}')
-            print('mlrose starting')
             result = self.opt_Discrete(
                 to_maximize, x_test, dist, columns, init=init,
                 max_attempts=train_iter, maxiter=train_iter, num_features=num_features)
-            print(f"mlrose result result is:{result}")
 
             if not self.discrete_state:
                 explanation = {
@@ -650,46 +542,27 @@ class OptimizedSearch(BaseExplanation):
                     x for idx, x in enumerate(columns)
                     if idx in np.nonzero(result)[0]
                 }
-            print('pruning')
+
             explanation = self._prune_explanation(
                 explanation, x_test, dist, to_maximize, max_features=num_features)
-            print(f"pruning output is {explanation}")
+
             modified = x_test.copy()
 
             for c in columns:
                 if c in explanation:
                     modified[c] = dist[c].values
 
-            # check if the modified sample is classified as class of interest 
-            # For multiple classes, check of one of the classes is the class of interest
-            modified_label = self.clf.predict(modified)[0]
-            probas = self.clf.predict_proba(modified)[0]
-            print(f"pruned explanation is {explanation}")
-            print(f"pruned sample probabilities are {probas}")
-            print(f"pruned sample class is {modified_label}")
-            print(f'to_max is {to_maximize}')
-            print(modified_label==to_maximize)
-            
+            probas = self.clf.predict_proba(modified)
+
             if not self.silent:
                 logging.info("Current probas: %s", probas)
-            
-            successfully_modified = False
-            if isinstance(modified_label, tuple):
-                if to_maximize in modified_label:
-                    successfully_modified = True
-            else:
-                if modified_label == to_maximize:
-                    successfully_modified = True
-
-            if successfully_modified:
-                current_best = probas[to_maximize]
+            if np.argmax(probas) == to_maximize:
+                current_best = np.max(probas)
                 if current_best > best_explanation_score:
-                    
                     best_explanation = explanation
                     best_explanation_score = current_best
                     best_modified = modified
                     best_dist = dist
-                    dist_idx = count
 
         if not self.silent and len(best_explanation) != 0:
             if single:
@@ -697,10 +570,7 @@ class OptimizedSearch(BaseExplanation):
             else:
                 for metric in best_explanation:
                     self._plot_changed(metric, x_test, best_dist, savefig=savefig, filename=filename)
-
-        print('optimized search complete')
-        print(f"best_explanation is: {best_explanation}")
-
+            
         if return_dist == False or len(best_explanation) == 0:
             return best_explanation
         else:
