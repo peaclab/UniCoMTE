@@ -58,9 +58,13 @@ pip install -r requirements.txt
 ```
 
 ### Usage
-Noteboks demonstrating usage: 
+“UniCoMTE/Sandia_Comlex_ECG_Implementation_Partial_Training.ipynb” demonstrates the application of the official version of UniCoMTE that utilizes a subset of the CODE15 training dataset. 
 
+“UniCoMTE/Sandia_Comlex_ECG_Implementation_Full_Training.ipynb” demonstrates the application of a modified version of UniCoMTE that utilizes the full CODE15 training dataset. 
 
+“UniCoMTE/Full_ECG_Data_Preprocessing_Pipeline.ipynb” demonstrates the extraction and preprocessing of the CODE testing and training data.
+
+“UniCoMTE/comlex_core/src/explainable_data_ECG.py” and “UniCoMTE/comlex_core/src/explainable_model_ECG.py” contain the data and model wrappers, respectively, used in our implementation. The user can define these according to the format of their data and classification algorithms.
 
 ---
 
