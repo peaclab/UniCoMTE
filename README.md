@@ -75,7 +75,7 @@ Our Implementation:
 
 “[UniCoMTE/Full_ECG_Data_Preprocessing_Pipeline.ipynb]([url](https://github.com/peaclab/UniCoMTE/blob/main/UniCoMTE/Full_ECG_Data_Preprocessing_Pipeline.ipynb))” demonstrates the extraction and preprocessing of the CODE testing and training data.
 
-“[UniCoMTE/comlex_core/src/explainable_data_ECG.py]([url](https://github.com/peaclab/UniCoMTE/blob/main/UniCoMTE/comlex_core/src/explainable_data_ECG.py))” and “[UniCoMTE/comlex_core/src/explainable_model_ECG.py](UniCoMTE/comlex_core/src/explainable_model_ECG.py)” contain the data and model wrappers, respectively, used in our implementation. The user can define these according to the format of their data and classification algorithms.
+“[UniCoMTE/comlex_core/src/explainable_data_ECG.py](UniCoMTE/comlex_core/src/explainable_data_ECG.py)” and “[UniCoMTE/comlex_core/src/explainable_model_ECG.py](UniCoMTE/comlex_core/src/explainable_model_ECG.py)” contain the data and model wrappers, respectively, used in our implementation. The user can define these according to the format of their data and classification algorithms.
 
 ---
 
