@@ -56,15 +56,20 @@ Install dependencies:
 ```bash
 pip install -r requirements.txt
 ```
-https://github.com/peaclab/UniCoMTE/blob/e3afbab7c052024260b4f48013a7187064c74fd1/UniCoMTE/Full_ECG_Data_Preprocessing_Pipeline.ipynb
 
 ### Usage
 
-Using UniCoMTE with a different model and dataset: 
-1. Create a copy of the data and model wrappers
-2. Edit the data wrapper to make necessary transformations. The end state of the data is listed in the data wrapper.
-3. Define the model wrapper in the script or jupyter notebook.
-4. Import data and model wrappers into the environment where UniCoMTE is being run.
+Using UniCoMTE with different models and datasets: 
+1. Create a copy of the data and model wrappers.
+
+2. Define the data wrapper.
+Edit the data wrapper to make necessary transformations to the training data, training lables and test point. The required outputs of the data wrapper are defined in the data wrapper, and are necessary for UniCoMTE. For instance, the output format of the training labels is a (N,1) Pandas dataframe. 
+
+3. Define necessary inference logic with the model wrapper.
+Functions could be defined within the script or imported into the script when instantiatiating the wrapped classifier.
+
+4. Import data and model wrappers into the UniCoMTE environment.
+Import data and model wrappers into the environment where CoMTE will be executed.
 
 
 Our Implementation:
