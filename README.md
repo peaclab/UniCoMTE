@@ -63,13 +63,13 @@ pip install -r requirements.txt
 1. Create a copy of the data and model wrappers.
 
 2. Define the data wrapper.
-Edit the data wrapper to make necessary transformations to the training data, training lables and test point. The required outputs of the data wrapper are defined in the data wrapper, and are necessary for UniCoMTE. For instance, the output format of the training labels is a (N,1) Pandas dataframe. 
+Edit the data wrapper to make necessary transformations to the training data, training lables and test point. The required outputs of the data wrapper (necessary for UniCoMTE) are defined in the data wrapper. For instance, in our implementation, the original lables follow a one-hot encoding stored in a (N,6) Numpy array. However, UniCoMTE requires a (N,1) Pandas dataframe. Thus, operations required to make this conversion are defined in the data wrapper. 
 
-3. Define necessary inference logic with the model wrapper.
-Functions could be defined within the script or imported into the script when instantiatiating the wrapped classifier.
+3. Define the model wrapper.
+Functions could be defined within UniCoMTE's execution environment or imported into the script when instantiatiating the wrapped classifier. For instance, in our implementation, the CNN classification model outputs a 1x6 array of probabilities. However, UniCoMTE requires single-class predictions. Post-processing to convert this set of probabilities into a single-class prediction involves a thresholding operation. Thus, both the model inference and thresholding algorithm are defined within the model wrapper. 
 
-4. Import data and model wrappers into the UniCoMTE environment.
-Import data and model wrappers into the environment where CoMTE will be executed.
+4. Import data and model wrappers.
+Import data and model wrappers into the environment where UniCoMTE will be executed. 
 
 
 
